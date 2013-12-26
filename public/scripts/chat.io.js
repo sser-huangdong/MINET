@@ -1,5 +1,5 @@
 (function($){
-  // create global app parameters...
+  // Global parameters...
   var NICK_MAX_LENGTH = 15,
     ROOM_MAX_LENGTH = 10,
     lockShakeAnimation = false,
@@ -7,13 +7,13 @@
     socket = null,
     clientId = null,
     nickname = null,
-    currentRoom = null,
+    currentChannel = null,
     serverAddress = 'http://localhost',
     serverDisplayName = 'MIRO',
     serverDisplayColor = '#1c5380',
     tmplt = {
-      room: [
-        '<li data-roomId="${room}" data-userName="${username}">',
+      channel: [
+        '<li data-channelId="${channel}" data-userName="${username}">',
         '<span class="icon"></span> ${username}',
         '</li>'
       ].join(""),
@@ -50,15 +50,6 @@
     $('#nickname-popup .begin').on('click', function() {
       handleNickname();
     });
-    $('#addroom-popup .input input').on('keydown', function(e) {
-      var key = e.which || e.keyCode;
-      if (key == 13) {
-        createRoom();
-      }
-    });
-    $('#addroom-popup .create').on('click', function() {
-      createRoom();
-    });
     $('.big-button-green.start').on('click', function() {
       $('#nickname-popup .input input').val('');
       Avgrund.show('#nickname-popup');
@@ -66,17 +57,8 @@
 	$('#nickname-popup .input input').focus();
       },100);
     });
-    /*
-    $('.chat-rooms .title-button').on('click', function() {
-      $('#addroom-popup .input input').val('');
-      Avgrund.show('#addroom-popup');
-      window.setTimeout(function() {
-	$('#addroom-popup .input input').focus();
-      },100);
-    });
-    */
-    $('.chat-rooms ul').on('scroll', function() {
-      $('.chat-rooms ul li.selected').css('top', $(this).scrollTop());
+    $('.chat-channels ul').on('scroll', function() {
+      $('.chat-channels ul li.selected').css('top', $(this).scrollTop());
     });
     $('.chat-messages').on('scroll', function() {
       var self = this;
@@ -88,14 +70,12 @@
 	}
       }, 50);
     });
-
-    $('.chat-rooms ul li').live('click', function() {
-      var room = $(this).attr('data-roomId');
+    $('.chat-channels ul li').live('click', function() {
+      var channel = $(this).attr('data-channelId');
       var userName = $(this).attr('data-userName');
-      if (room != currentRoom) {
-        socket.emit('unsubscribe', { room: currentRoom });
-        socket.emit('subscribe', { username: userName, room: room });
-        // setCurrentRoom(room);
+      if (channel != currentChannel) {
+        socket.emit('channelChange', { channel: currentChannel });
+        socket.emit('subscribe', { username: userName, channel: channel });
       }
     });
     $('.chat-clients ul li').live('click', function() {
@@ -103,106 +83,83 @@
       if (userName == nickname) {
         return;
       }
-      var roomName = (userName > nickname ?
+      var channelName = (userName > nickname ?
                       nickname + "+" + userName : userName + "+" + nickname);
-      socket.emit('p2p', { from: nickname, to: userName, room: roomName});
+      socket.emit('p2p', { from: nickname, to: userName, channel: channelName});
     });
   }
 
   // bind socket.io event handlers
   // this events fired in the server
   function bindSocketEvents() {
-
-    // when the connection is made, the server emiting
-    // the 'connect' event
     socket.on('connect', function() {
-      // firing back the connect event to the server
-      // and sending the nickname for the connected client
       socket.emit('connect', { nickname: nickname });
     });
     
-    // after the server created a client for us, the ready event
-    // is fired in the server with our clientId, now we can start 
     socket.on('ready', function(data) {
-      // hiding the 'connecting...' message
       $('.chat-shadow').animate({ 'opacity': 0 }, 200, function() {
 	$(this).hide();
 	$('.chat input').focus();
       });
-      
-      // saving the clientId localy
       clientId = data.clientId;
     });
 
-    // after the initialize, the server sends a list of
-    // all the active rooms
-    // socket.on('roomslist', function(data) {
-    //   for (var i = 0, len = data.rooms.length; i < len; i++) {
-    //     if (data.rooms[i] != '') {
-    //       addRoom(data.rooms[i], false);
-    //     }
-    //   }
-    // });
     socket.on('enterPublicChannel', function(data) {
-      addRoom('public', 'public', false);
+      addChannel('public', 'public', false);
     });
 
-    // when someone sends a message, the sever push it to
-      // our client through this event with a relevant data
     socket.on('sendMessage', function(data) {
       var nickname = data.client.nickname;
       var message = data.message;
-      
-      //display the message in the chat window
       insertMessage(nickname, message, true, false, false);
     });
-    
-    // when we subscribes to a room, the server sends a list
-    // with the clients in this room
-    socket.on('roomclients', function(data) {
-      // add the room name to the rooms list
-      addRoom(data.room, data.username, false);
-      // set the current room
-      setCurrentRoom(data.room);
-      // announce a welcome message
+
+    socket.on('channelClients', function(data) {
+      addChannel(data.channel, data.username, false);
+      setCurrentChannel(data.channel);
       if (!login) {
         login = true;
         insertMessage(serverDisplayName, 'Welcome to MINET, you are in the public channel. Enjoy!', true, false, true);
       }
       $('.chat-clients ul').empty();
-      
-      // add the clients to the clients list
       addClient({ nickname: nickname, clientId: clientId }, false, true);
       for (var i = 0, len = data.clients.length; i < len; i++) {
 	if (data.clients[i]) {
 	  addClient(data.clients[i], false);
 	}
       }
-
-      // hide connecting to room message message
       $('.chat-shadow').animate({ 'opacity': 0 }, 200, function() {
 	$(this).hide();
 	$('.chat input').focus();
       });
     });
-    
-    // if someone creates a room the server updates us
-    // about it
-    // socket.on('addroom', function(data) {
-    //   addRoom(data.room, true);
-    // });
-    
-    // if one of the room is empty from clients, the server,
-    // destroys it and updates us
-    socket.on('removeroom', function(data) {
-      removeRoom(data.room, true);
+
+    socket.on('P2PClients', function(data) {
+      addChannel(data.channel, data.username, false);
+      setCurrentChannel(data.channel);
+      $('.chat-clients ul').empty();
+      addClient({ nickname: nickname, clientId: clientId }, false, true);
+      for (var i = 0, len = data.clients.length; i < len; i++) {
+	if (data.clients[i]) {
+	  addClient(data.clients[i], false);
+	}
+      }
+      $('.chat-shadow').animate({ 'opacity': 0 }, 200, function() {
+	$(this).hide();
+	$('.chat input').focus();
+      });
+    });
+
+    socket.on('removeP2P', function(data) {
+      if (currentChannel == data.channel) {
+        setCurrentChannel('public');
+      }
+      removeP2P(data.channel);
     });
     
-    // with this event the server tells us when a client
-    // is connected or disconnected to the current room
     socket.on('presence', function(data) {
       var announce;
-      if (data.room == 'public') {
+      if (data.channel == 'public') {
         announce = true;
       } else {
         announce = false;
@@ -215,35 +172,24 @@
     });
   }
 
-  // add a room to the rooms list, socket.io may add
-  // a trailing '/' to the name so we are clearing it
-  function addRoom(name, usr, announce) {
+  function addChannel(name, usr, announce) {
     name = name.replace('/', '');
     usr = usr.replace('/', '');
-    // check if the room is not already in the list
-    if ($('.chat-rooms ul li[data-roomId="' + name + '"]').length == 0) {
-      $.tmpl(tmplt.room, { room: name , username: usr}).appendTo('.chat-rooms ul');
+    // check if the channel is not already in the list
+    if ($('.chat-channels ul li[data-channelId="' + name + '"]').length == 0) {
+      $.tmpl(tmplt.channel, { channel: name , username: usr}).appendTo('.chat-channels ul');
     }
   }
 
-  // remove a room from the rooms list
-  function removeRoom(name, announce) {
-    $('.chat-rooms ul li[data-roomId="' + name + '"]').remove();
-    // if announce is true, show a message about this room
-    if (announce) {
-      insertMessage(serverDisplayName, 'The room `' + name + '` destroyed...', true, false, true);
-    }
+  function removeP2P(name) {
+    $('.chat-channels ul li[data-channelId="' + name + '"]').remove();
   }
 
-  // add a client to the clients list
   function addClient(client, announce, isMe) {
     var $html = $.tmpl(tmplt.client, client);
-    
-    // if this is our client, mark him with color
     if (isMe) {
       $html.addClass('me');
     }
-
     if (announce) {
       insertMessage(serverDisplayName, client.nickname + ' has joined MINET...', true, false, true);
     }
@@ -255,35 +201,16 @@
     $('.chat-clients ul li[data-clientId="' + client.clientId + '"]').remove();
     
     if (announce) {
-      insertMessage(serverDisplayName, client.nickname + ' has left the room...', true, false, true);
+      insertMessage(serverDisplayName, client.nickname + ' has left the MINET...', true, false, true);
     }
   }
-
-  function createRoom() {
-    var room = $('#addroom-popup .input input').val().trim();
-    if (room && room.length <= ROOM_MAX_LENGTH && room != currentRoom) {
-      // show room creating message
-      $('.chat-shadow').show().find('.content').html('Creating room: ' + room + '...');
-      $('.chat-shadow').animate({ 'opacity': 1 }, 200);
-      
-      // unsubscribe from the current room
-      socket.emit('unsubscribe', { room: currentRoom });
-
-      // create and subscribe to the new room
-      socket.emit('subscribe', { room: room });
-      Avgrund.hide();
-    } else {
-      shake('#addroom-popup', '#addroom-popup .input input', 'tada', 'yellow');
-      $('#addroom-popup .input input').val('');
-    }
-  }
-
-  // sets the current room when the client
+  
+  // sets the current channel when the client
   // makes a subscription
-  function setCurrentRoom(room) {
-    currentRoom = room;
-    $('.chat-rooms ul li.selected').removeClass('selected');
-    $('.chat-rooms ul li[data-roomId="' + room + '"]').addClass('selected');
+  function setCurrentChannel(channel) {
+    currentChannel = channel;
+    $('.chat-channels ul li.selected').removeClass('selected');
+    $('.chat-channels ul li[data-channelId="' + channel + '"]').addClass('selected');
   }
 
   // save the client nickname and start the chat by
@@ -304,10 +231,8 @@
   function handleMessage() {
     var message = $('.chat-input input').val().trim();
     if (message) {
-
-      // send the message to the server with the room name
-      socket.emit('sendMessage', { message: message, room: currentRoom });
-      
+      // send the message to the server with the channel name
+      socket.emit('sendMessage', { message: message, channel: currentChannel });
       // display the message in the chat window
       insertMessage(nickname, message, true, true);
       $('.chat-input input').val('');

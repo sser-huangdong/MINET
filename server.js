@@ -44,43 +44,51 @@ io.sockets.on('connection', function(socket) {
   socket.on('unsubscribe', function(data) {
     unsubscribe(socket, data);
   });
+  socket.on('channelChange', function(data) {
+    changeChannel(socket, data);
+  });
   socket.on('disconnect', function() {
     disconnect(socket);
   });
 });
 
 function createP2P(socket, data) {
-  socket.join(data.room);
+  socket.join(data.channel);
   for (var chatclient in chatClients) {
     if (chatclient && chatClients[chatclient] && chatClients[chatclient].nickname == data.to) {
-      socketsID[chatclient].join(data.room);
-      // updatePresence(data.room, socketsID[chatclient], 'online');
-      socketsID[chatclient].emit('roomclients',
+      socketsID[chatclient].join(data.channel);
+      socketsID[chatclient].emit('P2PClients',
                                  {
                                    username: data.from,
-                                   room: data.room,
-                                   clients: getClientsInRoom(chatclient, data.room)
+                                   channel: data.channel,
+                                   clients: getClientsInChannel(chatclient, data.channel)
                                  });
       break;
     }
   }
-  // updatePresence(data.room, socket, 'online');
-  socket.emit('roomclients',
+  socket.emit('P2PClients',
               {
                 username: data.to,
-                room: data.room,
-                clients: getClientsInRoom(socket.id, data.room)
+                channel: data.channel,
+                clients: getClientsInChannel(socket.id, data.channel)
               });
 }
 
-// np
 function unsubscribe(socket, data) {
-  socket.leave(data.room);
+  updatePresence(data.channel, socket, 'offline');
+  socket.leave(data.channel);
+  if(data.channel != 'public') {
+    io.sockets.emit('removeP2P', { channel: data.channel });
+  }
+}
+
+function changeChannel(socket, data) {
+  socket.leave(data.channel);
 }
 
 function subscribe(socket, data) {
-  socket.join(data.room);
-  socket.emit('roomclients', { username: data.username, room: data.room, clients: getClientsInRoom(socket.id, data.room)});
+  socket.join(data.channel);
+  socket.emit('channelClients', { username: data.username, channel: data.channel, clients: getClientsInChannel(socket.id, data.channel)});
 }
 
 function connect(socket, data) {
@@ -89,44 +97,46 @@ function connect(socket, data) {
   socketsID[socket.id] = socket;
   allUsers.push(data);
   socket.emit('ready', { clientId: data.clientId });
-  enterPublicChannel(socket, { room: 'public' });
+  enterPublicChannel(socket, { channel: 'public' });
   socket.emit('enterPublicChannel');
 }
 
 function enterPublicChannel(socket, data) {
-  socket.join(data.room);
-  updatePresence(data.room, socket, 'online');
-  socket.emit('roomclients', {username: 'public', room: 'public', clients: getClientsInRoom(socket.id, data.room)});
+  socket.join(data.channel);
+  updatePresence(data.channel, socket, 'online');
+  socket.emit('channelClients', {username: 'public', channel: 'public', clients: getClientsInChannel(socket.id, data.channel)});
 }
 
 function disconnect(socket) {
-  var rooms = io.sockets.manager.roomClients[socket.id];
-  for (var room in rooms) {
-    if (room && rooms[room]) {
-      unsubscribe(socket, { room: room.replace('/','') });
+  var channels = io.sockets.manager.roomClients[socket.id];
+  for (var channel in channels) {
+    if (channel && channels[channel]) {
+      unsubscribe(socket, { channel: channel.replace('/','') });
     }
   }
+  var indexOf = allUsers.indexOf(chatClients[socket.id]);
+  allUsers.splice(indexOf, 1);
   delete chatClients[socket.id];
+  delete socketsID[socket.id];
 }
 
 function sendMessage(socket, data) {
-  socket.broadcast.to(data.room).emit('sendMessage',
+  socket.broadcast.to(data.channel).emit('sendMessage',
                                       { client: chatClients[socket.id],
                                         message: data.message,
-                                        room: data.room
+                                        channel: data.channel
                                       });
 }
 
-function getRooms() {
+function getChannels() {
   return Object.keys(io.sockets.manager.rooms);
 }
 
-// get array of clients in a room
-function getClientsInRoom(socketId, room) {
-  var socketIds = io.sockets.manager.rooms['/' + room];
+function getClientsInChannel(socketId, channel) {
+  var socketIds = io.sockets.manager.rooms['/' + channel];
   var clients = [];
 
-  if (room == 'public') {
+  if (channel == 'public') {
     for (var i = 0, len = allUsers.length; i < len; ++i) {
       if (allUsers[i] != chatClients[socketId]) {
         clients.push(allUsers[i]);
@@ -145,26 +155,11 @@ function getClientsInRoom(socketId, room) {
   return clients;
 }
 
-// get the amount of clients in aroom
-function countClientsInRoom(room) {
-  // 'io.sockets.manager.rooms' is an object that holds
-  // the active room names as a key and an array of
-  // all subscribed client socket ids
-  if (io.sockets.manager.rooms['/' + room]) {
-    return io.sockets.manager.rooms['/' + room].length;
-  }
-  return 0;
-}
-
 // updating all other clients when a client goes
 // online or offline. 
-function updatePresence(room, socket, state) {
-  room = room.replace('/','');
-
-  // by using 'socket.broadcast' we can send/emit
-  // a message/event to all other clients except
-  // the sender himself
-  socket.broadcast.to(room).emit('presence', { client: chatClients[socket.id], state: state, room: room });
+function updatePresence(channel, socket, state) {
+  channel = channel.replace('/','');
+  socket.broadcast.to(channel).emit('presence', { client: chatClients[socket.id], state: state, channel: channel });
 }
 
 function generateId() {
