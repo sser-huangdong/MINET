@@ -1,4 +1,4 @@
 MINET
 =====
 
-Final project of Computer Network
+Thanks to [Udi Talias](https://github.com/uditalias/chat-nodejs) for his demo.
