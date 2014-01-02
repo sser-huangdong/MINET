@@ -2,8 +2,8 @@ var express = require('express'),
   app = express(),
   server = require('http').createServer(app),
   io = require('socket.io').listen(server),
-  ipaddr  = process.env.OPENSHIFT_INTERNAL_IP || "127.0.0.1",
-  port = process.env.OPENSHIFT_INTERNAL_PORT || 8080,
+  ipaddr  = process.env.OPENSHIFT_NODEJS_IP || "127.0.0.1",
+  port = process.env.OPENSHIFT_NODEJS_PORT || 8080,
   socketsID = new Object(),
   allUsers = new Array(),
   chatClients = new Object(); // hash object to save clients data { socketid: { clientid, nickname }, socketid: { ... } }
@@ -148,7 +148,7 @@ function getClientsInChannel(socketId, channel) {
       // socketsCount = socketIds.length;
       for (var i = 0, len = socketIds.length; i < len; i++) {
         if (socketIds[i] != socketId) {
-	  clients.push(chatClients[socketIds[i]]);
+    clients.push(chatClients[socketIds[i]]);
         }
       }
     }
