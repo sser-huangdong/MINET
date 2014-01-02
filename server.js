@@ -8,7 +8,7 @@ var express = require('express'),
   allUsers = new Array(),
   chatClients = new Object(); // hash object to save clients data { socketid: { clientid, nickname }, socketid: { ... } }
 
-server.listen(port， ipaddr);
+server.listen(port, ipaddr);
 
 app.use("/styles", express.static(__dirname + '/public/styles'));
 app.use("/scripts", express.static(__dirname + '/public/scripts'));
