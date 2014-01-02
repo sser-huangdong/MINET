@@ -6,6 +6,7 @@ var express = require('express'),
   port = process.env.OPENSHIFT_NODEJS_PORT || 8080,
   socketsID = new Object(),
   allUsers = new Array(),
+  chats = new Object(),
   chatClients = new Object(); // hash object to save clients data { socketid: { clientid, nickname }, socketid: { ... } }
 
 server.listen(port, ipaddr);
@@ -84,12 +85,15 @@ function unsubscribe(socket, data) {
 }
 
 function changeChannel(socket, data) {
-  socket.leave(data.channel);
+  if (data.channel != 'public') {
+    socket.leave(data.channel);
+  }
 }
 
 function subscribe(socket, data) {
   socket.join(data.channel);
   socket.emit('channelClients', { username: data.username, channel: data.channel, clients: getClientsInChannel(socket.id, data.channel)});
+  updatePresence(data.channel, socket, 'online');
 }
 
 function connect(socket, data) {
@@ -127,6 +131,10 @@ function sendMessage(socket, data) {
                                         message: data.message,
                                         channel: data.channel
                                       });
+  if (!(data.channel in chats)) {
+    chats[data.channel] = [];
+  }
+  chats[data.channel].push({client: chatClients[socket.id], message: data.message, channel: data.channel});
 }
 
 function getChannels() {

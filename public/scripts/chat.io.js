@@ -8,7 +8,7 @@
     clientId = null,
     nickname = null,
     currentChannel = null,
-    serverAddress = 'http://localhost',
+    serverAddress = "http://minet.sserhuangdong.com/", // change this to your own website!
     serverDisplayName = 'MIRO',
     serverDisplayColor = '#1c5380',
     tmplt = {
@@ -111,7 +111,20 @@
     socket.on('sendMessage', function(data) {
       var nickname = data.client.nickname;
       var message = data.message;
+      if (data.channel == 'public') {
+        nickname += '(Public)';
+      }
       insertMessage(nickname, message, true, false, false);
+    });
+
+    socket.on('listMessage', function(data) {
+      for (var index in data) {
+        if (data[index].client.nickname == nickname) {
+          insertMessage(data[index].client.nickname, data[index].message, true, true, false);
+        } else {
+          insertMessage(data[index].client.nickname, data[index].message, true, false, false);
+        }
+      }
     });
 
     socket.on('channelClients', function(data) {
@@ -159,12 +172,13 @@
     
     socket.on('presence', function(data) {
       var announce;
-      if (data.channel == 'public') {
+      if (data.channel == 'public' && !login) {
         announce = true;
       } else {
         announce = false;
       }
-      if (data.state == 'online') {
+      if (data.state == 'online' && data.channel == currentChannel) {
+        $('.chat-clients ul li[data-clientId="' + data.client.clientId + '"]').remove();
 	addClient(data.client, announce);
       } else if (data.state == 'offline') {
 	removeClient(data.client, announce);
