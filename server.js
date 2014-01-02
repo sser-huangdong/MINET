@@ -2,12 +2,13 @@ var express = require('express'),
   app = express(),
   server = require('http').createServer(app),
   io = require('socket.io').listen(server),
-  port = 8080,
+  ipaddr  = process.env.OPENSHIFT_INTERNAL_IP || "127.0.0.1",
+  port = process.env.OPENSHIFT_INTERNAL_PORT || 8080,
   socketsID = new Object(),
   allUsers = new Array(),
   chatClients = new Object(); // hash object to save clients data { socketid: { clientid, nickname }, socketid: { ... } }
 
-server.listen(port);
+server.listen(port， ipaddr);
 
 app.use("/styles", express.static(__dirname + '/public/styles'));
 app.use("/scripts", express.static(__dirname + '/public/scripts'));
